@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Documentation — IMDB Top 1000 D3 Project</title>
+<meta name="description" content="Design process, rationale, and findings from an interactive D3.js dashboard exploring the IMDB Top 1000 films.">
+<meta property="og:title" content="IMDB Top 1000 — Project Documentation">
+<meta property="og:description" content="Design process, rationale, and findings — D3.js final project.">
+<meta property="og:image" content="og-image.svg">
+<meta property="og:type" content="article">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4eef9;          /* soft lavender background */
+    --panel: #ffffff;        /* white panels */
+    --text: #2a1f44;         /* deep purple text */
+    --muted: #6b5b8e;        /* muted purple */
+    --accent: #f5c518;       /* IMDB yellow */
+    --accent-2: #7c3aed;     /* royal purple secondary */
+    --grid: #d8c9eb;         /* soft lavender gridlines */
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  pre, code { font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace; }
+  header {
+    padding: 18px 28px 10px;
+    border-bottom: 1px solid var(--grid);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 22px; }
+  header h1 .badge { background: var(--accent); color: #000; padding: 2px 8px; border-radius: 3px;
+    font-size: 14px; font-weight: 700; margin-right: 8px; }
+  header .nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 14px; }
+  header .nav a:hover, header .nav a.active { color: var(--text); }
+
+  .layout {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 28px 28px 80px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 40px;
+  }
+  aside.toc {
+    position: sticky;
+    top: 28px;
+    align-self: start;
+    font-size: 13px;
+  }
+  aside.toc h4 {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+  aside.toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border-left: 1px solid var(--grid);
+  }
+  aside.toc li { margin: 0; }
+  aside.toc a {
+    display: block;
+    padding: 6px 12px;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    margin-left: -1px;
+    transition: all 0.15s;
+  }
+  aside.toc a:hover { color: var(--text); }
+  aside.toc a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+  }
+  main { min-width: 0; }
+  h2 {
+    border-bottom: 1px solid var(--grid);
+    padding-bottom: 6px;
+    margin-top: 48px;
+    color: var(--text);
+    font-size: 20px;
+    scroll-margin-top: 28px;
+  }
+  h2:first-of-type { margin-top: 0; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.toc { position: static; }
+    aside.toc ol { display: flex; flex-wrap: wrap; gap: 6px; border-left: none; }
+    aside.toc a { border: 1px solid var(--grid); border-radius: 4px; padding: 4px 10px; }
+    aside.toc a.active { border-color: var(--accent); }
+  }
+  h3 { color: var(--accent); font-size: 16px; margin-top: 28px; }
+  p, li { color: var(--text); }
+  a { color: var(--accent-2); }
+  code { background: var(--panel); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--panel); padding: 12px 16px; border-radius: 6px; overflow-x: auto;
+        border: 1px solid var(--grid); font-size: 12.5px; }
+  blockquote {
+    margin: 16px 0; padding: 8px 16px;
+    border-left: 3px solid var(--accent);
+    color: var(--muted); font-style: italic;
+    background: var(--panel);
+  }
+  figure { margin: 18px 0; padding: 12px; background: var(--panel);
+           border: 1px solid var(--grid); border-radius: 6px; }
+  figure img, figure object { width: 100%; display: block; border-radius: 4px; background: #fdf6e3; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+
+  .video-wrap {
+    position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;
+    background: var(--panel); border-radius: 8px; border: 1px solid var(--grid);
+  }
+  .video-wrap iframe, .video-wrap video, .video-wrap .placeholder {
+    position: absolute; top:0; left:0; width:100%; height:100%; border:0;
+    background: #000;
+  }
+  .video-wrap .placeholder {
+    display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px;
+    color: var(--muted); text-align:center; padding: 20px;
+  }
+  .video-wrap .placeholder code { background: #0a0d12; }
+
+  .findings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .questions-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin: 16px 0 24px;
+  }
+  @media (max-width: 700px) {
+    .questions-grid { grid-template-columns: 1fr; }
+  }
+  .question-card {
+    background: var(--panel);
+    border: 1px solid var(--grid);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 14px 16px 14px 18px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .q-tag {
+    background: var(--accent);
+    color: #1a1124;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.4px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .question-card p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .q-sub {
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  .finding-card {
+    background: var(--panel);
+    border: 1px solid var(--grid);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .finding-card h4 { margin: 0 0 6px; color: var(--accent); font-size: 14px; }
+  .finding-card p { margin: 0; font-size: 13.5px; color: var(--text); }
+
+  .cta {
+    margin: 24px 0;
+    padding: 16px 20px;
+    background: linear-gradient(90deg, rgba(245,197,24,0.12), rgba(124,58,237,0.08));
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+  }
+  .cta a { font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px;
+           border-top: 1px solid var(--grid); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1><span class="badge">IMDB</span>Top 1000 Interactive Dashboard</h1>
+    <div style="color: var(--muted); font-size: 13px;">N328 Visualizing Information · Vera Dureke · Spring 2026</div>
+  </div>
+  <nav class="nav">
+    <a href="index.html">Visualization</a>
+    <a href="about.html" class="active">Documentation</a>
+  </nav>
+</header>
+
+<div class="layout">
+
+<aside class="toc" aria-label="Table of contents">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#overview">1. Overview</a></li>
+    <li><a href="#design">2. Design process</a></li>
+    <li><a href="#rationale">3. Design rationale</a></li>
+    <li><a href="#findings">4. Findings</a></li>
+    <li><a href="#video">5. Demo video</a></li>
+    <li><a href="#impl">6. Implementation</a></li>
+    <li><a href="#limits">7. Limitations</a></li>
+  </ol>
+</aside>
+
+<main>
+
+<div class="cta">
+  <strong>Live interactive visualization →</strong>
+  <a href="index.html">Open the dashboard</a>
+  &nbsp;·&nbsp;
+  Source &amp; data on
+  <a href="https://github.com/veradureke/imdb-d3-final" target="_blank" rel="noopener">GitHub</a>
+</div>
+
+<h2 id="overview">1. Project overview</h2>
+<p>
+This project is an interactive dashboard that lets a viewer explore the
+<a href="https://www.kaggle.com/datasets/harshitshankhdhar/imdb-dataset-of-top-1000-movies-and-tv-shows" target="_blank" rel="noopener">IMDB
+Top 1000 Movies dataset</a>: 1,000 films from 1920–2020 with attributes for
+release year, genre, certificate, runtime, IMDB rating, Meta score, director,
+top-billed cast, vote count, and worldwide gross. The dashboard is built with
+<a href="https://d3js.org" target="_blank" rel="noopener">D3.js v7</a> and is hosted
+as a static site (no backend), so it works in any modern Chrome browser.
+</p>
+
+<h3>Driving questions</h3>
+<p>The dashboard is organized around four related questions a film fan might ask:</p>
+<div class="questions-grid">
+  <div class="question-card">
+    <span class="q-tag">Q1</span>
+    <p>Do critically loved films also make the most money?<br/><em class="q-sub">rating vs. box-office gross</em></p>
+  </div>
+  <div class="question-card">
+    <span class="q-tag">Q2</span>
+    <p>What does the rating distribution look like, and where does any given film land?</p>
+  </div>
+  <div class="question-card">
+    <span class="q-tag">Q3</span>
+    <p>How have ratings, gross, and the volume of "great" films changed by decade?</p>
+  </div>
+  <div class="question-card">
+    <span class="q-tag">Q4</span>
+    <p>Which directors most consistently produce critically acclaimed films?</p>
+  </div>
+</div>
+
+<h2 id="design">2. Design process</h2>
+
+<h3>First concept: single big scatterplot</h3>
+<p>
+My first instinct was to focus on the rating-vs-gross question and design one
+large scatterplot. Each film would appear as a dot, with the X-axis showing
+box-office gross on a log scale, since gross spans five orders of magnitude
+and a linear scale would crush most of the data into one corner. The Y-axis
+would track IMDB rating, color would encode genre, and dot size would be
+proportional to vote count as a rough proxy for cultural reach.
+</p>
+<figure>
+  <img src="20260501_201615.jpg" alt="Hand-drawn pencil sketch of a single scatterplot showing rating vs gross" />
+  <figcaption>First concept: a single-question scatterplot. Useful, but only answers one of four questions.</figcaption>
+</figure>
+<p>
+After living with the sketch for a while, I realized this design was answering
+only one of my questions. The dataset carries rich temporal information about
+release year, plus a lot of director and cast metadata that a single chart
+wastes. I decided to expand into a coordinated multi-view dashboard instead.
+</p>
+
+<h3>Second concept: coordinated multi-view dashboard</h3>
+<p>
+The second concept adds three companion charts: a histogram, a decade line
+and bar combo, and a director bar chart. All four panels are bound to a single
+shared <em>filter state</em>, so any selection in one chart re-filters the
+others. This is the linked or coordinated views pattern from class. I labeled
+the panels Q1 through Q4 in the sketch to keep them tied back to the four
+driving questions.
+</p>
+<figure>
+  <img src="20260501_201627.jpg" alt="Hand-drawn pencil sketch of the four-panel coordinated dashboard with sections labeled Q1 through Q4" />
+  <figcaption>Second concept: the four-panel layout that became the basis for the implementation, plus a film list table along the bottom.</figcaption>
+</figure>
+
+<h3>Final design</h3>
+<p>
+The screenshot below shows the second concept fully implemented in D3.js with
+the lavender theme, the live filter controls along the top, the sticky summary
+line, and the detail-on-demand film table at the bottom. The four panels and
+the film list match the second-concept sketch directly, with a few production
+refinements: the rating-vs-gross legend was lifted out of the chart corner and
+laid horizontally across the top of the panel so it stops covering the data,
+the decade chart layers a yellow average-rating line over translucent purple
+count bars, and the director ranking is restricted to directors with at least
+three films in the dataset.
+</p>
+<figure>
+  <img src="V2 Final.png" alt=" Screenshot of the implemented dashboard showing all four linked charts and the film list" />
+  <figcaption>Final design: the live dashboard at <a href="index.html">index.html</a>.</figcaption>
+</figure>
+
+<h3>Iterations after coding</h3>
+<p>Things I changed after I started implementing:</p>
+<ul>
+  <li>I originally wanted a stacked area chart for "films per decade by genre," but with 21 genres it was unreadable. I replaced it with translucent bars showing total film count behind a yellow line for average rating — much easier to scan.</li>
+  <li>I almost colored dots by decade. After testing, color-by-primary-genre was more useful because decade is already on the line chart's X-axis.</li>
+  <li>I added the search box late, after I tried to find "Christopher Nolan films" in the table and realized scrolling was painful.</li>
+  <li>I cut a planned "stars" co-occurrence network — D3 force layouts are fun but they didn't help answer my four questions, so removing it kept the page focused.</li>
+</ul>
+
+<h2 id="rationale">3. Design rationale</h2>
+
+<h3>Visual encodings</h3>
+<table>
+  <thead>
+    <tr><th>Variable</th><th>Encoding</th><th>Why</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>IMDB rating</td>
+      <td>Y-position (scatter, line); X-position (histogram, director bar)</td>
+      <td>Position is the most accurate visual channel — rating is the main quantitative variable.</td>
+    </tr>
+    <tr>
+      <td>Box office gross</td>
+      <td>X-position (scatter), log scale</td>
+      <td>Gross spans <code>$1K → $2.8B</code>. A linear scale would crush 90% of films into one corner; log spreads them.</td>
+    </tr>
+    <tr>
+      <td>Number of votes</td>
+      <td>Dot area (sqrt scale)</td>
+      <td>Area encodes a third quantitative dimension without adding a chart. Sqrt-scaled so area (not radius) is proportional to value, per perception literature.</td>
+    </tr>
+    <tr>
+      <td>Primary genre</td>
+      <td>Categorical color hue</td>
+      <td>Genres are unordered categories. Tableau-10 palette is colorblind-friendlier than D3's default <code>schemeCategory10</code>.</td>
+    </tr>
+    <tr>
+      <td>Decade</td>
+      <td>X-axis on line chart; bar height = film count</td>
+      <td>Decade is naturally ordinal/quantitative — position is the right channel.</td>
+    </tr>
+    <tr>
+      <td>Director</td>
+      <td>Y-axis labels on horizontal bar chart</td>
+      <td>Long director names read better horizontally; the X-axis stays free to encode the quantitative average rating.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Layout</h3>
+<p>
+The two large charts (scatter and decade line) sit on the left because they
+carry the headline questions; the smaller histogram and director bar are to
+their right as "supporting" views. The film table runs full-width across the
+bottom because it's a detail-on-demand view — you read it after the charts
+narrow the field. Filters are pinned to the top so the user always knows the
+current state of the dashboard.
+</p>
+
+<h3>Color &amp; theme</h3>
+<p>
+Dark theme with the IMDb yellow (<code>#f5c518</code>) used <em>sparingly</em>
+for the most important call-outs (selected histogram bin, average-rating line,
+selected director, table rating values). Secondary blue (<code>#58a6ff</code>)
+is the default chart-element color so the yellow accent really pops when it
+appears.
+</p>
+
+<h3>Interactivity</h3>
+<ul>
+  <li><strong>Genre filter</strong> (dropdown) — narrows all four panels.</li>
+  <li><strong>Search</strong> — matches title, director, or any of the top-billed stars.</li>
+  <li><strong>Min-votes filter</strong> — strips out cult/obscure films when you want to focus on widely-seen cinema.</li>
+  <li><strong>Year-range brush</strong> on the decade line chart — drag to constrain to an era.</li>
+  <li><strong>Histogram bin click</strong> — click a rating bucket to filter to those films, click again to release.</li>
+  <li><strong>Director bar click</strong> — locks all that director's films highlighted (with surrounding films dimmed) across the scatter, plus filters the table.</li>
+  <li><strong>Sortable table columns</strong> — click any header to re-sort.</li>
+  <li><strong>Hover tooltips</strong> on every dot, bar, and bin show film/group details.</li>
+</ul>
+
+<h2 id="findings">4. Findings I uncovered using the dashboard</h2>
+
+<div class="findings-grid">
+  <div class="finding-card">
+    <h4>Rating ≠ box office</h4>
+    <p>The scatter shows only a weak positive correlation between IMDB rating and gross. Many 8.5+ films grossed under $10M; the highest-grossing films cluster around 8.0–8.4, not at the top.</p>
+  </div>
+  <div class="finding-card">
+    <h4>Most "great" films are 7.6–8.0</h4>
+    <p>The histogram is right-skewed: ratings under 8.0 dominate even in this hand-picked top-1000 set. Films at 9.0+ are vanishingly rare (just a handful).</p>
+  </div>
+  <div class="finding-card">
+    <h4>Production volume soared after 1990</h4>
+    <p>The decade bars climb steeply from the 1990s onward — the 2000s and 2010s contribute more than half of all top-1000 films, while average rating stays remarkably flat (~8.0).</p>
+  </div>
+  <div class="finding-card">
+    <h4>Christopher Nolan, Stanley Kubrick &amp; Hayao Miyazaki dominate director averages</h4>
+    <p>With the "≥3 films" filter, the highest-average directors are a mix of modern blockbuster auteurs (Nolan), classical masters (Kubrick, Coppola), and animation (Miyazaki). Click any of their bars to see the highlight cascade across the scatter.</p>
+  </div>
+  <div class="finding-card">
+    <h4>Genre × era effects</h4>
+    <p>Filtering to "Animation" and brushing the line chart shows almost no top-1000 entries before the 1990s — Pixar, DreamWorks and Studio Ghibli's mainstream rise reshaped what "great animated film" means in this list.</p>
+  </div>
+  <div class="finding-card">
+    <h4>Critics &amp; audiences mostly agree, but…</h4>
+    <p>Sorting the table by Meta score reveals a handful of films with strong audience love but middling critic reception (and a smaller set vice-versa) — interesting candidates for closer reading.</p>
+  </div>
+</div>
+
+<h2 id="video">5. Demo video</h2>
+<p>
+A 2–4 minute screen-capture walkthrough of the dashboard with narration is
+embedded below.
+</p>
+<div class="video-wrap">
+  <video controls preload="metadata" playsinline>
+    <source src="video2378517474.mp4" type="video/mp4">
+    Your browser doesn't support HTML5 video. You can
+    <a href="video2378517474.mp4">download the MP4 here</a> instead.
+  </video>
+</div>
+
+<h2 id="impl">6. Implementation notes</h2>
+
+<h3>Data cleaning</h3>
+<p>The CSV needed three small clean-ups, all done at parse time in JavaScript:</p>
+<ul>
+  <li><code>Released_Year</code> had one bad row (<code>"PG"</code>) — dropped via <code>isNaN</code> guard.</li>
+  <li><code>Runtime</code> was strings like <code>"142 min"</code>; stripped non-digits and parsed to an integer.</li>
+  <li><code>Gross</code> was strings with commas like <code>"28,341,469"</code>; stripped non-digits and parsed. About 17% of films have no gross — those are simply omitted from the scatter (which requires both axes), but kept everywhere else.</li>
+</ul>
+
+<h3>Tech stack</h3>
+<ul>
+  <li><strong>D3.js v7</strong> — all chart rendering, scales, axes, and the brush.</li>
+  <li><strong>Plain HTML, CSS, and JavaScript</strong> — no build step, no framework. The project is just static files plus the CSV.</li>
+  <li><strong>GitHub Pages</strong> — static hosting with a public URL.</li>
+</ul>
+
+<h3>Files in the repo</h3>
+<table>
+  <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>index.html</code></td><td>Interactive D3 dashboard</td></tr>
+    <tr><td><code>about.html</code></td><td>This documentation page</td></tr>
+    <tr><td><code>imdb_top_1000.csv</code></td><td>Source dataset (1,000 films, 16 columns)</td></tr>
+    <tr><td><code>20260501_201615.jpg</code></td><td>Initial pencil sketch (single-chart design)</td></tr>
+    <tr><td><code>20260501_201627.jpg</code></td><td>Refined pencil sketch (coordinated dashboard)</td></tr>
+    <tr><td><code>video2378517474.mp4</code></td><td>2–4 minute screen-capture demo with narration</td></tr>
+    <tr><td><code>README.md</code></td><td>Project overview and setup notes</td></tr>
+  </tbody>
+</table>
+
+<h2 id="limits">7. Limitations &amp; future work</h2>
+<ul>
+  <li>The dataset is itself biased — it's IMDB's Top 1000, not all films. Rating distributions look the way they do because someone curated for quality.</li>
+  <li>"Gross" is unadjusted for inflation — older films are systematically penalized on the X-axis. A future version could use BLS CPI to normalize.</li>
+  <li>Only the primary genre is used for color. A film tagged "Action, Crime, Drama" gets the Action color even when it's mostly drama.</li>
+  <li>A force-directed view of co-starring relationships is the obvious next step but was scoped out for this submission.</li>
+</ul>
+
+</main>
+
+</div>
+
+<footer>
+  Vera Dureke · N328 Visualizing Information · Spring 2026 ·
+  Data: <a href="https://www.kaggle.com/datasets/harshitshankhdhar/imdb-dataset-of-top-1000-movies-and-tv-shows" target="_blank" rel="noopener">IMDB Top 1000 (Kaggle)</a>
+  · Built with <a href="https://d3js.org" target="_blank" rel="noopener">D3.js</a>.
+</footer>
+
+<script>
+  // Highlight the current section in the TOC as you scroll.
+  const tocLinks = document.querySelectorAll("aside.toc a");
+  const sections = [...tocLinks].map(a => document.getElementById(a.getAttribute("href").slice(1))).filter(Boolean);
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id));
+      }
+    });
+  }, { rootMargin: "-30% 0px -65% 0px" });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

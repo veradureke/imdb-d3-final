@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IMDB Top 1000 Interactive Dashboard</title>
+<meta name="description" content="An interactive D3.js dashboard exploring 1,000 top-rated films from 1920–2020: ratings, box office, genres, directors, and trends.">
+<meta property="og:title" content="IMDB Top 1000 — Interactive D3 Dashboard">
+<meta property="og:description" content="Explore ratings, box office, genres, directors, and trends across the IMDB Top 1000 films.">
+<meta property="og:image" content="og-image.svg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --bg: #f4eef9;          /* soft lavender background */
+    --panel: #ffffff;        /* white panels for clean separation */
+    --panel-2: #ede2f8;      /* deeper lavender for inputs */
+    --text: #2a1f44;         /* deep purple text */
+    --muted: #6b5b8e;        /* muted purple */
+    --accent: #f5c518;       /* IMDB yellow — kept for brand pop */
+    --accent-2: #7c3aed;     /* royal purple secondary accent */
+    --grid: #d8c9eb;         /* soft lavender gridlines */
+    --tooltip-bg: rgba(42, 31, 68, 0.97); /* dark purple tooltip */
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  pre, code { font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace; }
+  header {
+    padding: 18px 28px 10px;
+    border-bottom: 1px solid var(--grid);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 0.3px;
+  }
+  header h1 .badge {
+    background: var(--accent);
+    color: #000;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 14px;
+    font-weight: 700;
+    margin-right: 8px;
+  }
+  header .nav a {
+    color: var(--muted);
+    text-decoration: none;
+    margin-left: 18px;
+    font-size: 14px;
+  }
+  header .nav a:hover { color: var(--text); }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 14px 28px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--grid);
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(8px);
+    background: rgba(244, 238, 249, 0.92);
+  }
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .control-group label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  select, input[type="text"] {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--grid);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+  }
+  select:focus, input:focus { border-color: var(--accent-2); }
+  button.reset {
+    background: transparent;
+    color: var(--accent-2);
+    border: 1px solid var(--accent-2);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button.reset:hover { background: rgba(88, 166, 255, 0.12); }
+
+  .summary {
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: auto;
+  }
+  .summary strong { color: var(--accent); font-size: 15px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+    padding: 16px 28px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--grid);
+    border-radius: 8px;
+    padding: 14px 16px 6px;
+  }
+  .panel h3 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .panel p.hint {
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  svg { display: block; width: 100%; height: auto; }
+  .axis path, .axis line { stroke: var(--grid); }
+  .axis text { fill: var(--muted); font-size: 11px; }
+  .axis-label { fill: var(--muted); font-size: 12px; }
+
+  .dot { fill-opacity: 0.75; stroke: var(--bg); stroke-width: 0.5; cursor: pointer; transition: fill-opacity 120ms; }
+  .dot.dim { fill-opacity: 0.08; }
+  .dot.highlight { stroke: var(--text); stroke-width: 1.5; }
+
+  .bar { cursor: pointer; }
+  .bar:hover { filter: brightness(1.2); }
+  .bar.selected { stroke: var(--text); stroke-width: 2; }
+
+  .line { fill: none; stroke-width: 2.5; }
+  .area { fill-opacity: 0.15; }
+
+  .legend text { fill: var(--text); font-size: 11px; font-weight: 500; }
+  .legend rect { cursor: pointer; }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--tooltip-bg);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #f4eef9;            /* light lavender — readable on dark purple tooltip */
+    max-width: 280px;
+    box-shadow: 0 6px 20px rgba(42, 31, 68, 0.25);
+    opacity: 0;
+    transition: opacity 100ms;
+    z-index: 100;
+  }
+  .tooltip strong { color: var(--accent); }
+  .tooltip .meta { color: #c4b3e0; font-size: 11px; margin-top: 4px; }   /* muted lavender */
+
+  .table-panel {
+    grid-column: 1 / -1;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--grid);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  thead th:hover { color: var(--text); }
+  tbody td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--grid);
+  }
+  tbody tr:hover { background: var(--panel-2); }
+  tbody tr.highlight-row { background: rgba(245, 197, 24, 0.08); }
+  .rating-cell { color: var(--accent-2); font-weight: 700; }
+
+  footer {
+    padding: 14px 28px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--grid);
+    text-align: center;
+  }
+  footer a { color: var(--accent-2); text-decoration: none; }
+
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1><span class="badge">IMDB</span>Top 1000 Interactive Dashboard</h1>
+    <div class="subtitle">Explore ratings, box office, genres, directors, and trends from 1920 – 2020</div>
+  </div>
+  <nav class="nav">
+    <a href="index.html">Visualization</a>
+    <a href="about.html">Documentation</a>
+  </nav>
+</header>
+
+<div class="controls">
+  <div class="control-group">
+    <label for="genre-select">Genre</label>
+    <select id="genre-select">
+      <option value="ALL">All genres</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label for="search-input">Search title/director</label>
+    <input type="text" id="search-input" placeholder="e.g., Nolan, Inception" />
+  </div>
+  <div class="control-group">
+    <label for="min-votes">Min. votes</label>
+    <select id="min-votes">
+      <option value="0">0</option>
+      <option value="50000">50K</option>
+      <option value="200000">200K</option>
+      <option value="500000">500K</option>
+      <option value="1000000">1M</option>
+    </select>
+  </div>
+  <button class="reset" id="reset-btn">Reset filters</button>
+  <div class="summary" id="summary">Loading…</div>
+</div>
+
+<div class="grid">
+
+  <div class="panel" id="scatter-panel">
+    <h3>Rating vs. Box Office Gross</h3>
+    <p class="hint">Each dot is a film. Color = primary genre. Size = number of IMDB votes. Hover for details, click to lock highlight.</p>
+    <svg id="scatter"></svg>
+  </div>
+
+  <div class="panel" id="hist-panel">
+    <h3>Distribution of IMDB Ratings</h3>
+    <p class="hint">How are ratings distributed in the current selection? Click a bar to filter the dashboard to that rating bucket.</p>
+    <svg id="histogram"></svg>
+  </div>
+
+  <div class="panel" id="line-panel">
+    <h3>Average Rating &amp; Film Count by Decade</h3>
+    <p class="hint">Yellow line = avg IMDB rating per decade. Bars below = number of top-1000 films released in each decade. Brush to filter by year range.</p>
+    <svg id="line"></svg>
+  </div>
+
+  <div class="panel" id="bar-panel">
+    <h3>Top Directors (by avg rating, min 3 films)</h3>
+    <p class="hint">Directors ranked by mean IMDB rating across their films in the dataset. Click a bar to highlight that director's films across all charts.</p>
+    <svg id="bar"></svg>
+  </div>
+
+  <div class="panel table-panel" id="table-panel">
+    <h3 id="table-heading">Film list (showing top 50 by rating)</h3>
+    <p class="hint">Click any column header to sort. Filters above and selections in the charts update this list.</p>
+    <table id="film-table">
+      <thead>
+        <tr>
+          <th data-key="Series_Title">Title</th>
+          <th data-key="Released_Year">Year</th>
+          <th data-key="Genre">Genre</th>
+          <th data-key="Director">Director</th>
+          <th data-key="IMDB_Rating">IMDB</th>
+          <th data-key="Meta_score">Meta</th>
+          <th data-key="Runtime_min">Runtime</th>
+          <th data-key="No_of_Votes">Votes</th>
+          <th data-key="Gross_num">Gross ($)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<footer>
+  Built with <a href="https://d3js.org" target="_blank" rel="noopener">D3.js v7</a>.
+  Data: <a href="https://www.kaggle.com/datasets/harshitshankhdhar/imdb-dataset-of-top-1000-movies-and-tv-shows" target="_blank" rel="noopener">IMDB Top 1000 (Kaggle)</a>.
+  See the <a href="about.html">documentation page</a> for design notes and the project video.
+</footer>
+
+<script>
+/* =========================================================================
+   IMDB Top 1000 — Interactive Linked Dashboard
+   Charts: Scatter, Histogram, Line+Bar (decade), Director Bar, Film table
+   Linked filters: genre dropdown, search box, min-votes, decade brush,
+                   histogram bin click, director bar click.
+   ========================================================================= */
+
+const tooltip = d3.select("#tooltip");
+
+// Colorblind-friendly categorical palette (Tableau 10) extended.
+const PALETTE = [
+  "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
+  "#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ab",
+  "#86bcb6","#d37295","#fabfd2","#b6992d","#499894",
+  "#d4a6c8","#9d7660","#ffbe7d","#a0cbe8","#f1ce63","#8cd17d"
+];
+
+const STATE = {
+  raw: [],
+  filtered: [],
+  genres: [],
+  selectedGenre: "ALL",
+  searchTerm: "",
+  minVotes: 0,
+  yearRange: null,         // [minYear, maxYear] from brush
+  ratingRange: null,       // [r0, r1] from histogram click
+  selectedDirector: null,  // string
+  hoveredFilm: null,
+  sortKey: "IMDB_Rating",
+  sortDir: -1
+};
+
+// ---- Data loading & cleanup ---------------------------------------------
+d3.csv("imdb_top_1000.csv", row => {
+  const year = parseInt(row.Released_Year, 10);
+  const runtime = parseInt((row.Runtime || "").replace(/[^0-9]/g, ""), 10);
+  const grossNum = row.Gross ? +row.Gross.replace(/[^0-9]/g, "") : NaN;
+  const meta = row.Meta_score ? +row.Meta_score : NaN;
+  const votes = +row.No_of_Votes || 0;
+  return {
+    Series_Title: row.Series_Title,
+    Released_Year: isNaN(year) ? null : year,
+    Decade: isNaN(year) ? null : Math.floor(year / 10) * 10,
+    Certificate: row.Certificate || "",
+    Runtime_min: isNaN(runtime) ? null : runtime,
+    Genre: row.Genre,
+    GenreList: (row.Genre || "").split(",").map(s => s.trim()).filter(Boolean),
+    PrimaryGenre: ((row.Genre || "").split(",")[0] || "").trim(),
+    IMDB_Rating: +row.IMDB_Rating,
+    Meta_score: isNaN(meta) ? null : meta,
+    Director: row.Director,
+    Stars: [row.Star1, row.Star2, row.Star3, row.Star4].filter(Boolean),
+    No_of_Votes: votes,
+    Gross_num: isNaN(grossNum) ? null : grossNum
+  };
+}).then(data => {
+  // Drop the few rows with broken essentials
+  STATE.raw = data.filter(d => d.Released_Year && d.IMDB_Rating);
+  STATE.genres = Array.from(new Set(STATE.raw.flatMap(d => d.GenreList))).sort();
+
+  // Color scale by primary genre — uses the most common primary genres first
+  const primaryCounts = d3.rollup(STATE.raw, v => v.length, d => d.PrimaryGenre);
+  const orderedPrimaries = Array.from(primaryCounts.entries())
+    .sort((a, b) => d3.descending(a[1], b[1]))
+    .map(d => d[0]);
+  STATE.colorScale = d3.scaleOrdinal()
+    .domain(orderedPrimaries)
+    .range(PALETTE);
+
+  initControls();
+  applyFilters();
+  renderAll();
+}).catch(err => {
+  d3.select("#summary").text("⚠ Could not load imdb_top_1000.csv. Make sure the CSV is in the same folder. " + err.message);
+});
+
+// ---- Controls ------------------------------------------------------------
+function initControls() {
+  const genreSel = d3.select("#genre-select");
+  genreSel.selectAll("option.genre-opt")
+    .data(STATE.genres)
+    .enter().append("option")
+    .attr("class", "genre-opt")
+    .attr("value", d => d)
+    .text(d => d);
+  genreSel.on("change", function() {
+    STATE.selectedGenre = this.value;
+    applyFilters(); renderAll();
+  });
+
+  d3.select("#search-input").on("input", function() {
+    STATE.searchTerm = this.value.trim().toLowerCase();
+    applyFilters(); renderAll();
+  });
+
+  d3.select("#min-votes").on("change", function() {
+    STATE.minVotes = +this.value;
+    applyFilters(); renderAll();
+  });
+
+  d3.select("#reset-btn").on("click", () => {
+    STATE.selectedGenre = "ALL";
+    STATE.searchTerm = "";
+    STATE.minVotes = 0;
+    STATE.yearRange = null;
+    STATE.ratingRange = null;
+    STATE.selectedDirector = null;
+    d3.select("#genre-select").property("value", "ALL");
+    d3.select("#search-input").property("value", "");
+    d3.select("#min-votes").property("value", "0");
+    applyFilters(); renderAll();
+  });
+
+  // Sortable columns
+  d3.selectAll("#film-table thead th").on("click", function() {
+    const k = this.dataset.key;
+    if (STATE.sortKey === k) STATE.sortDir *= -1;
+    else { STATE.sortKey = k; STATE.sortDir = (k === "Series_Title" || k === "Genre" || k === "Director") ? 1 : -1; }
+    renderTable();
+  });
+}
+
+function applyFilters() {
+  STATE.filtered = STATE.raw.filter(d => {
+    if (STATE.selectedGenre !== "ALL" && !d.GenreList.includes(STATE.selectedGenre)) return false;
+    if (STATE.minVotes > 0 && d.No_of_Votes < STATE.minVotes) return false;
+    if (STATE.yearRange && (d.Released_Year < STATE.yearRange[0] || d.Released_Year > STATE.yearRange[1])) return false;
+    if (STATE.ratingRange && (d.IMDB_Rating < STATE.ratingRange[0] || d.IMDB_Rating > STATE.ratingRange[1])) return false;
+    if (STATE.searchTerm) {
+      const hay = (d.Series_Title + " " + d.Director + " " + d.Stars.join(" ")).toLowerCase();
+      if (!hay.includes(STATE.searchTerm)) return false;
+    }
+    return true;
+  });
+
+  // Update summary
+  const f = STATE.filtered;
+  const meanR = d3.mean(f, d => d.IMDB_Rating);
+  const totalGross = d3.sum(f.filter(d => d.Gross_num), d => d.Gross_num);
+  d3.select("#summary").html(
+    `<strong>${f.length}</strong> films · avg rating <strong>${meanR ? meanR.toFixed(2) : "—"}</strong> · combined gross <strong>$${totalGross ? d3.format(".2s")(totalGross).replace("G","B") : "—"}</strong>`
+  );
+}
+
+function renderAll() {
+  renderScatter();
+  renderHistogram();
+  renderLineDecade();
+  renderDirectorBar();
+  renderTable();
+}
+
+// ---- Tooltip helpers -----------------------------------------------------
+function showTip(html, evt) {
+  tooltip.style("opacity", 1).html(html);
+  moveTip(evt);
+}
+function moveTip(evt) {
+  const pad = 14;
+  let x = evt.pageX + pad, y = evt.pageY + pad;
+  const w = tooltip.node().offsetWidth, h = tooltip.node().offsetHeight;
+  if (x + w > window.innerWidth) x = evt.pageX - w - pad;
+  if (y + h > window.innerHeight) y = evt.pageY - h - pad;
+  tooltip.style("left", x + "px").style("top", y + "px");
+}
+function hideTip() { tooltip.style("opacity", 0); }
+
+function filmTipHtml(d) {
+  const fmtGross = d.Gross_num ? "$" + d3.format(",")(d.Gross_num) : "—";
+  return `
+    <strong>${d.Series_Title}</strong> (${d.Released_Year})<br/>
+    <span style="color:var(--accent-2)">${d.Genre}</span><br/>
+    Director: ${d.Director}<br/>
+    IMDB <strong>${d.IMDB_Rating}</strong>${d.Meta_score ? " · Meta " + d.Meta_score : ""}<br/>
+    Runtime: ${d.Runtime_min || "—"} min · Votes: ${d3.format(",")(d.No_of_Votes)}<br/>
+    Gross: ${fmtGross}
+    <div class="meta">Stars: ${d.Stars.slice(0,3).join(", ")}</div>
+  `;
+}
+
+// =========================================================================
+//  SCATTERPLOT — Rating vs Gross
+// =========================================================================
+function renderScatter() {
+  const svg = d3.select("#scatter");
+  svg.selectAll("*").remove();
+  const W = svg.node().clientWidth || 700, H = 440;
+  svg.attr("viewBox", `0 0 ${W} ${H}`);
+
+  const m = { top: 38, right: 16, bottom: 46, left: 64 };  // extra top room for horizontal legend
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const g = svg.append("g").attr("transform", `translate(${m.left},${m.top})`);
+
+  // Tighter domain: clip the ~5% of films with extreme-low gross so the bulk of
+  // the data fills the chart instead of leaving the left half empty.
+  const X_MIN = 1e4;
+  const pts = STATE.filtered.filter(d => d.Gross_num && d.Gross_num >= X_MIN);
+  const x = d3.scaleLog().domain([X_MIN, d3.max(STATE.raw, d => d.Gross_num) || 1e9]).range([0, iw]).nice();
+  const grossTickFormat = d => "$" + d3.format("~s")(d).replace("G", "B").replace("k", "K");
+  const y = d3.scaleLinear().domain([7.5, d3.max(STATE.raw, d => d.IMDB_Rating)]).range([ih, 0]).nice();
+  const r = d3.scaleSqrt().domain([0, d3.max(STATE.raw, d => d.No_of_Votes)]).range([2, 12]);
+
+  // Gridlines
+  g.append("g").attr("class","axis")
+    .attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(x).tickValues([1e4, 1e5, 1e6, 1e7, 1e8, 1e9]).tickFormat(grossTickFormat).tickSizeInner(-ih))
+    .selectAll("line").attr("stroke-opacity", 0.2);
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(y).ticks(6).tickSizeInner(-iw))
+    .selectAll("line").attr("stroke-opacity", 0.2);
+
+  // Axis labels
+  g.append("text").attr("class","axis-label")
+    .attr("x", iw/2).attr("y", ih + 36).attr("text-anchor","middle")
+    .text("Worldwide Box Office Gross (log scale, USD)");
+  g.append("text").attr("class","axis-label")
+    .attr("transform", `rotate(-90)`)
+    .attr("x", -ih/2).attr("y", -46).attr("text-anchor","middle")
+    .text("IMDB Rating");
+
+  // Dots
+  const dots = g.selectAll("circle.dot")
+    .data(pts, d => d.Series_Title + d.Released_Year)
+    .join("circle")
+    .attr("class", "dot")
+    .attr("cx", d => x(d.Gross_num))
+    .attr("cy", d => y(d.IMDB_Rating))
+    .attr("r", d => r(d.No_of_Votes))
+    .attr("fill", d => STATE.colorScale(d.PrimaryGenre))
+    .classed("highlight", d => STATE.selectedDirector && d.Director === STATE.selectedDirector)
+    .classed("dim", d => STATE.selectedDirector && d.Director !== STATE.selectedDirector);
+
+  dots.on("mouseover", (evt, d) => { showTip(filmTipHtml(d), evt); })
+      .on("mousemove", moveTip)
+      .on("mouseout", hideTip)
+      .on("click", (evt, d) => {
+        STATE.selectedDirector = (STATE.selectedDirector === d.Director) ? null : d.Director;
+        renderAll();
+      });
+
+  // Horizontal genre legend along the top of the chart (so it doesn't overlap the data).
+  const topGenres = orderedPrimaryGenres().slice(0, 10);
+  const legend = g.append("g").attr("class","legend")
+    .attr("transform", `translate(0,-22)`);
+  let xCursor = 0, yRow = 0;
+  const itemGap = 16, rowHeight = 16;
+  topGenres.forEach(genre => {
+    const item = legend.append("g");
+    const rect = item.append("rect").attr("width", 10).attr("height", 10).attr("rx", 2)
+      .attr("fill", STATE.colorScale(genre)).style("cursor", "pointer");
+    const text = item.append("text").attr("x", 14).attr("y", 9).text(genre)
+      .style("cursor", "pointer");
+    const itemWidth = 14 + text.node().getComputedTextLength() + itemGap;
+    // Wrap to a new row if this item would overflow the chart width
+    if (xCursor + itemWidth > iw && xCursor > 0) {
+      yRow += rowHeight;
+      xCursor = 0;
+    }
+    item.attr("transform", `translate(${xCursor},${yRow})`);
+    [rect, text].forEach(sel => sel.on("click", () => {
+      STATE.selectedGenre = genre;
+      d3.select("#genre-select").property("value", genre);
+      applyFilters(); renderAll();
+    }));
+    xCursor += itemWidth;
+  });
+}
+
+function orderedPrimaryGenres() {
+  return STATE.colorScale.domain();
+}
+
+// =========================================================================
+//  HISTOGRAM — Rating distribution
+// =========================================================================
+function renderHistogram() {
+  const svg = d3.select("#histogram");
+  svg.selectAll("*").remove();
+  const W = svg.node().clientWidth || 460, H = 300;
+  svg.attr("viewBox", `0 0 ${W} ${H}`);
+
+  const m = { top: 12, right: 14, bottom: 44, left: 46 };
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const g = svg.append("g").attr("transform", `translate(${m.left},${m.top})`);
+
+  const x = d3.scaleLinear().domain([7.5, 9.4]).range([0, iw]);
+  const bins = d3.bin().domain(x.domain()).thresholds(d3.range(7.5, 9.4, 0.1))(STATE.filtered.map(d => d.IMDB_Rating));
+  const y = d3.scaleLinear().domain([0, d3.max(bins, b => b.length) || 1]).range([ih, 0]).nice();
+
+  g.append("g").attr("class","axis")
+    .attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(x).ticks(8));
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(y).ticks(5).tickSizeInner(-iw))
+    .selectAll("line").attr("stroke-opacity", 0.2);
+
+  g.append("text").attr("class","axis-label")
+    .attr("x", iw/2).attr("y", ih + 34).attr("text-anchor","middle")
+    .text("IMDB Rating");
+  g.append("text").attr("class","axis-label")
+    .attr("transform","rotate(-90)").attr("x", -ih/2).attr("y", -34).attr("text-anchor","middle")
+    .text("# of films");
+
+  g.selectAll("rect.bar")
+    .data(bins).enter().append("rect")
+    .attr("class","bar")
+    .attr("x", d => x(d.x0) + 1)
+    .attr("y", d => y(d.length))
+    .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 2))
+    .attr("height", d => ih - y(d.length))
+    .attr("fill", d => {
+      if (STATE.ratingRange && d.x0 >= STATE.ratingRange[0] && d.x1 <= STATE.ratingRange[1] + 1e-6) return "var(--accent)";
+      return "var(--accent-2)";
+    })
+    .on("mouseover", (evt, d) => showTip(`<strong>${d.x0.toFixed(1)} – ${d.x1.toFixed(1)}</strong><br/>${d.length} films`, evt))
+    .on("mousemove", moveTip).on("mouseout", hideTip)
+    .on("click", (evt, d) => {
+      if (STATE.ratingRange && Math.abs(STATE.ratingRange[0] - d.x0) < 1e-6) STATE.ratingRange = null;
+      else STATE.ratingRange = [d.x0, d.x1];
+      applyFilters(); renderAll();
+    });
+
+  if (STATE.ratingRange) {
+    g.append("text").attr("class","axis-label")
+      .attr("x", iw - 4).attr("y", 12).attr("text-anchor","end")
+      .attr("fill", "var(--accent)")
+      .text(`Filtering ${STATE.ratingRange[0].toFixed(1)}–${STATE.ratingRange[1].toFixed(1)} (click again to clear)`);
+  }
+}
+
+// =========================================================================
+//  LINE + BAR — Average rating and # films per decade
+// =========================================================================
+function renderLineDecade() {
+  const svg = d3.select("#line");
+  svg.selectAll("*").remove();
+  const W = svg.node().clientWidth || 700, H = 320;
+  svg.attr("viewBox", `0 0 ${W} ${H}`);
+
+  const m = { top: 14, right: 60, bottom: 48, left: 50 };
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const g = svg.append("g").attr("transform", `translate(${m.left},${m.top})`);
+
+  const decades = d3.range(1920, 2030, 10);
+
+  const grouped = d3.rollup(
+    STATE.filtered,
+    v => ({ avg: d3.mean(v, d => d.IMDB_Rating), count: v.length, avgGross: d3.mean(v.filter(d=>d.Gross_num), d=>d.Gross_num) }),
+    d => d.Decade
+  );
+  const seriesData = decades.map(dec => ({
+    decade: dec,
+    ...(grouped.get(dec) || { avg: null, count: 0, avgGross: null })
+  }));
+
+  const x = d3.scaleLinear().domain([1920, 2020]).range([0, iw]);
+  const yAvg = d3.scaleLinear().domain([7.5, 9.0]).range([ih, 0]).nice();
+  const yCnt = d3.scaleLinear().domain([0, d3.max(STATE.raw, d => 1) ? d3.max(d3.rollup(STATE.raw, v=>v.length, d=>d.Decade).values()) : 1]).range([ih, ih*0.55]);
+
+  // Bars (count) — translucent, behind line
+  g.selectAll("rect.bar")
+    .data(seriesData).enter().append("rect")
+    .attr("class","bar")
+    .attr("x", d => x(d.decade) - 18)
+    .attr("y", d => yCnt(d.count))
+    .attr("width", 36)
+    .attr("height", d => ih - yCnt(d.count))
+    .attr("fill", "var(--accent-2)")
+    .attr("opacity", 0.45)
+    .on("mouseover", (evt, d) => showTip(`<strong>${d.decade}s</strong><br/>${d.count} films<br/>Avg rating: ${d.avg ? d.avg.toFixed(2) : "—"}<br/>Avg gross: ${d.avgGross ? "$" + d3.format(".2s")(d.avgGross).replace("G","B") : "—"}`, evt))
+    .on("mousemove", moveTip).on("mouseout", hideTip);
+
+  // Avg rating line + dots
+  const valid = seriesData.filter(d => d.avg != null);
+  const line = d3.line().x(d => x(d.decade)).y(d => yAvg(d.avg)).curve(d3.curveMonotoneX);
+  g.append("path").datum(valid)
+    .attr("class","line").attr("stroke","var(--accent)")
+    .attr("d", line);
+  g.selectAll("circle.linept").data(valid).enter().append("circle")
+    .attr("class","linept")
+    .attr("cx", d => x(d.decade)).attr("cy", d => yAvg(d.avg))
+    .attr("r", 4).attr("fill","var(--accent)")
+    .on("mouseover", (evt, d) => showTip(`<strong>${d.decade}s</strong><br/>Avg rating: <strong>${d.avg.toFixed(2)}</strong><br/>${d.count} films`, evt))
+    .on("mousemove", moveTip).on("mouseout", hideTip);
+
+  // Axes
+  g.append("g").attr("class","axis")
+    .attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(x).ticks(11).tickFormat(d => d + "s"));
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(yAvg).ticks(4));
+  g.append("g").attr("class","axis")
+    .attr("transform", `translate(${iw},0)`)
+    .call(d3.axisRight(yCnt).ticks(4));
+
+  g.append("text").attr("class","axis-label")
+    .attr("x", 0).attr("y", -4).attr("text-anchor","start")
+    .attr("fill", "var(--accent)")
+    .style("font-weight", "600")
+    .text("◆ Avg rating");
+  g.append("text").attr("class","axis-label")
+    .attr("x", iw).attr("y", -4).attr("text-anchor","end")
+    .attr("fill", "var(--accent-2)")
+    .style("font-weight", "600")
+    .text("# films ◆");
+
+  g.append("text").attr("class","axis-label")
+    .attr("x", iw/2).attr("y", ih + 38).attr("text-anchor","middle")
+    .text("Decade  ·  drag to brush a year range");
+
+  // Brush
+  const brush = d3.brushX()
+    .extent([[0, 0], [iw, ih]])
+    .on("end", brushed);
+  const brushG = g.append("g").attr("class","brush").call(brush);
+  if (STATE.yearRange) brushG.call(brush.move, [x(STATE.yearRange[0]), x(STATE.yearRange[1])]);
+
+  function brushed({ selection, sourceEvent }) {
+    if (!sourceEvent) return;
+    if (!selection) {
+      STATE.yearRange = null;
+    } else {
+      const [x0, x1] = selection;
+      STATE.yearRange = [Math.round(x.invert(x0)), Math.round(x.invert(x1))];
+    }
+    applyFilters(); renderAll();
+  }
+}
+
+// =========================================================================
+//  BAR CHART — Top directors by average rating
+// =========================================================================
+function renderDirectorBar() {
+  const svg = d3.select("#bar");
+  svg.selectAll("*").remove();
+  const W = svg.node().clientWidth || 460, H = 320;
+  svg.attr("viewBox", `0 0 ${W} ${H}`);
+
+  const m = { top: 10, right: 16, bottom: 34, left: 150 };
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const g = svg.append("g").attr("transform", `translate(${m.left},${m.top})`);
+
+  const byDir = d3.rollups(
+    STATE.filtered,
+    v => ({ avg: d3.mean(v, d => d.IMDB_Rating), count: v.length, films: v }),
+    d => d.Director
+  ).filter(([k, v]) => v.count >= 3 && k);
+  const top = byDir.sort((a,b) => d3.descending(a[1].avg, b[1].avg)).slice(0, 12);
+
+  if (!top.length) {
+    g.append("text").attr("class","axis-label")
+      .attr("x", iw/2).attr("y", ih/2).attr("text-anchor","middle")
+      .text("No director has ≥3 films in current filter.");
+    return;
+  }
+
+  const y = d3.scaleBand().domain(top.map(d => d[0])).range([0, ih]).padding(0.18);
+  const x = d3.scaleLinear().domain([7.5, d3.max(top, d => d[1].avg)]).range([0, iw]).nice();
+
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(y).tickSize(0))
+    .call(s => s.select(".domain").remove());
+  g.append("g").attr("class","axis")
+    .attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(x).ticks(5));
+
+  g.selectAll("rect.bar").data(top).enter().append("rect")
+    .attr("class","bar")
+    .classed("selected", d => d[0] === STATE.selectedDirector)
+    .attr("x", 0).attr("y", d => y(d[0]))
+    .attr("height", y.bandwidth())
+    .attr("width", d => x(d[1].avg))
+    .attr("fill", d => d[0] === STATE.selectedDirector ? "var(--accent)" : "var(--accent-2)")
+    .on("mouseover", (evt, d) => showTip(`<strong>${d[0]}</strong><br/>Avg rating: ${d[1].avg.toFixed(2)}<br/>${d[1].count} films in dataset`, evt))
+    .on("mousemove", moveTip).on("mouseout", hideTip)
+    .on("click", (evt, d) => {
+      STATE.selectedDirector = (STATE.selectedDirector === d[0]) ? null : d[0];
+      renderAll();
+    });
+
+  g.selectAll("text.barval").data(top).enter().append("text")
+    .attr("class","axis-label")
+    .attr("x", d => x(d[1].avg) - 5).attr("y", d => y(d[0]) + y.bandwidth()/2 + 4)
+    .attr("text-anchor","end").attr("fill","#fff")
+    .style("font-size","10.5px")
+    .text(d => d[1].avg.toFixed(2));
+
+  g.append("text").attr("class","axis-label")
+    .attr("x", iw/2).attr("y", ih + 28).attr("text-anchor","middle")
+    .text("Avg IMDB rating");
+}
+
+// =========================================================================
+//  TABLE
+// =========================================================================
+function renderTable() {
+  const tbody = d3.select("#film-table tbody");
+  let rows = STATE.filtered.slice();
+  if (STATE.selectedDirector) {
+    rows = rows.filter(d => d.Director === STATE.selectedDirector);
+  }
+  rows.sort((a, b) => {
+    const va = a[STATE.sortKey], vb = b[STATE.sortKey];
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === "string") return STATE.sortDir * d3.ascending(va, vb);
+    return STATE.sortDir * d3.ascending(va, vb);
+  });
+  const top = rows.slice(0, 100);
+  d3.select("#table-heading").text(
+    `Film list — ${rows.length} match${rows.length===1?"":"es"}${STATE.selectedDirector ? " for " + STATE.selectedDirector : ""} (showing ${top.length})`
+  );
+
+  const tr = tbody.selectAll("tr").data(top, d => d.Series_Title + d.Released_Year);
+  tr.exit().remove();
+  const trEnter = tr.enter().append("tr");
+  trEnter.append("td").attr("class","col-title");
+  trEnter.append("td").attr("class","col-year");
+  trEnter.append("td").attr("class","col-genre");
+  trEnter.append("td").attr("class","col-dir");
+  trEnter.append("td").attr("class","col-imdb rating-cell");
+  trEnter.append("td").attr("class","col-meta");
+  trEnter.append("td").attr("class","col-rt");
+  trEnter.append("td").attr("class","col-votes");
+  trEnter.append("td").attr("class","col-gross");
+
+  const all = trEnter.merge(tr);
+  all.classed("highlight-row", d => STATE.selectedDirector && d.Director === STATE.selectedDirector);
+  all.select(".col-title").text(d => d.Series_Title);
+  all.select(".col-year").text(d => d.Released_Year);
+  all.select(".col-genre").text(d => d.Genre);
+  all.select(".col-dir").text(d => d.Director);
+  all.select(".col-imdb").text(d => d.IMDB_Rating);
+  all.select(".col-meta").text(d => d.Meta_score == null ? "—" : d.Meta_score);
+  all.select(".col-rt").text(d => d.Runtime_min == null ? "—" : d.Runtime_min + " min");
+  all.select(".col-votes").text(d => d3.format(",")(d.No_of_Votes));
+  all.select(".col-gross").text(d => d.Gross_num == null ? "—" : "$" + d3.format(",")(d.Gross_num));
+}
+
+// Re-render on resize for responsive widths
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderAll, 120);
+});
+</script>
+</body>
+</html>
